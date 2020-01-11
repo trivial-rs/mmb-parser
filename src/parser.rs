@@ -100,8 +100,8 @@ fn parse_term<'a, V: Visitor<'a>>(
     let unify_indices = stream.done();
 
     visitor.parse_term(
-        From::from(sort),
-        (offset, num_args as usize),
+        sort,
+        (offset, offset + num_args as usize),
         From::from(ret_ty),
         unify.0,
         unify_indices,
@@ -161,7 +161,7 @@ fn parse_theorem<'a, V: Visitor<'a>>(
 
     let unify_indices = stream.done();
 
-    visitor.parse_theorem((offset, num_args as usize), unify.0, unify_indices);
+    visitor.parse_theorem((offset, offset + num_args as usize), unify.0, unify_indices);
 
     Ok((i, ()))
 }
@@ -296,7 +296,7 @@ fn take_proof_until_end<'a, S: ProofStream>(input: &'a [u8], stream: &mut S) -> 
         let (left, command) = parse_opcode(i)?;
         i = left;
 
-        stream.push(From::from(command));
+        stream.push(command);
 
         if let Proof::End = command.opcode {
             break;

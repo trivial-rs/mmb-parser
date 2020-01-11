@@ -1,5 +1,5 @@
+use mmb_types::opcode;
 mod error;
-pub mod opcode;
 mod parser;
 pub mod visitor;
 

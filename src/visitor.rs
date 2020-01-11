@@ -1,17 +1,13 @@
 use crate::opcode::{Command, Proof, Statement, Unify};
 
 pub trait UnifyStream {
-    type Command: From<Command<Unify>>;
-
-    fn push(&mut self, command: Self::Command);
+    fn push(&mut self, command: Command<Unify>);
 
     fn done(&self) -> (usize, usize);
 }
 
 pub trait ProofStream {
-    type Command: From<Command<Proof>>;
-
-    fn push(&mut self, command: Self::Command);
+    fn push(&mut self, command: Command<Proof>);
 
     fn done(&self) -> (usize, usize);
 }
@@ -41,7 +37,7 @@ pub trait Visitor<'a> {
 
     fn parse_term(
         &mut self,
-        sort: Self::Sort,
+        sort_idx: u8,
         binders: (usize, usize),
         ret_ty: Self::Binder,
         unify: &'a [u8],
