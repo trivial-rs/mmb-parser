@@ -3,6 +3,7 @@ use nom::number;
 use nom::Err;
 
 use crate::error::*;
+use crate::index;
 use crate::opcode::{Command, Proof, Unify};
 use crate::visitor::{ProofStream, UnifyStream, Visitor};
 use crate::Mmb;
@@ -21,7 +22,15 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
 
     let (i, _padding) = complete::take(4u8)(i)?;
 
-    let (i, _index_ptr) = number::complete::le_u64(i)?;
+    let (i, index_ptr) = number::complete::le_u64(i)?;
+
+    let (index, _) = complete::take(index_ptr as usize)(input)?;
+
+    let (j, _padding) = complete::take(8u8)(index)?;
+
+    let (j, sort_index) = complete::take(num_sorts * 8)(j)?;
+    let (j, term_index) = complete::take(num_terms * 8)(j)?;
+    let (_, theorem_index) = complete::take(num_theorems * 8)(j)?;
 
     let (i, sorts) = complete::take(num_sorts)(i)?;
 
@@ -45,6 +54,9 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
             terms,
             theorems,
             proofs,
+            sort_index,
+            term_index,
+            theorem_index,
         },
     ))
 }
@@ -56,6 +68,44 @@ fn parse_binders<'a, T: From<u64>>(input: &'a [u8], slice: &mut [T]) -> IResult<
         let (i, n) = number::complete::le_u64(left)?;
         left = i;
         *e = From::from(n);
+    }
+
+    Ok((left, ()))
+}
+
+fn parse_nul_terminated_slice(i: &[u8]) -> IResult<'_, &[u8]> {
+    let (_, len) = complete::take_till(|c| c == 0)(i)?;
+    let len = len.len();
+
+    complete::take(len + 1)(i)
+}
+
+fn parse_index_entry(i: &[u8]) -> IResult<'_, &[u8]> {
+    let (i, _padding) = complete::take(4 * 8 + 4 + 1usize)(i)?;
+    parse_nul_terminated_slice(i)
+}
+
+pub fn parse_index<'a, V: index::Visitor>(
+    file: &'a [u8],
+    table: &'a [u8],
+    len: usize,
+    visitor: &mut V,
+) -> IResult<'a, ()> {
+    let mut left = table;
+
+    for idx in 0..len {
+        let (i, ptr) = number::complete::le_u64(left)?;
+
+        let (entry, _) = complete::take(ptr)(file)?;
+        let (_, name) = parse_index_entry(entry)?;
+
+        visitor.visit(idx, ptr, name);
+
+        if left.is_empty() {
+            break;
+        }
+
+        left = i;
     }
 
     Ok((left, ()))
