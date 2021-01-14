@@ -96,7 +96,7 @@ pub fn parse_index<'a, V: index::Visitor>(
     for idx in 0..len {
         let (i, ptr) = number::complete::le_u64(left)?;
 
-        let (entry, _) = complete::take(ptr)(file)?;
+        let (entry, _) = complete::take(ptr as usize)(file)?;
         let (_, name) = parse_index_entry(entry)?;
 
         visitor.visit(idx, ptr, name);
