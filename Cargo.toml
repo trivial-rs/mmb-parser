@@ -1,6 +1,6 @@
 [package]
 name = "mmb-parser"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Ivo C.S. Wingelaar <ivo@codeforge.rs>"]
 description = "A parser for the Metamath Zero binary proof format"
 keywords = ["metamath-zero"]
