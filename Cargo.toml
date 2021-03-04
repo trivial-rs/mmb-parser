@@ -1,6 +1,6 @@
 [package]
 name = "mmb-parser"
-version = "0.5.0"
+version = "0.5.1"
 readme = "README.md"
 repository = "https://github.com/trivial-rs/mmb-parser"
 authors = ["Ivo C.S. Wingelaar <ivo@codeforge.rs>"]
