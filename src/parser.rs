@@ -26,7 +26,7 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
 
     let (index, _) = complete::take(index_ptr as usize)(input)?;
 
-    let (j, _padding) = complete::take(8u8)(index)?;
+    let (j, _root_bst_ptr) = number::complete::le_u64(index)?;
 
     let (j, sort_index) = complete::take(num_sorts * 8)(j)?;
     let (j, term_index) = complete::take(num_terms * 8)(j)?;
@@ -81,7 +81,14 @@ fn parse_nul_terminated_slice(i: &[u8]) -> IResult<'_, &[u8]> {
 }
 
 fn parse_index_entry(i: &[u8]) -> IResult<'_, &[u8]> {
-    let (i, _padding) = complete::take(4 * 8 + 4 + 1usize)(i)?;
+    let (i, _left) = number::complete::le_u64(i)?;
+    let (i, _right) = number::complete::le_u64(i)?;
+    let (i, _row) = number::complete::le_u32(i)?;
+    let (i, _col) = number::complete::le_u32(i)?;
+    let (i, _proof) = number::complete::le_u64(i)?;
+    let (i, _idx) = number::complete::le_u32(i)?;
+    let (i, _kind) = number::complete::le_u8(i)?;
+
     parse_nul_terminated_slice(i)
 }
 
