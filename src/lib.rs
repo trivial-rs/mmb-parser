@@ -1,4 +1,4 @@
-use mmb_types::opcode;
+pub use mmb_types::opcode;
 mod error;
 pub mod index;
 mod parser;
