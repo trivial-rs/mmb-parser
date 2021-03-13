@@ -80,16 +80,31 @@ fn parse_nul_terminated_slice(i: &[u8]) -> IResult<'_, &[u8]> {
     complete::take(len + 1)(i)
 }
 
-fn parse_index_entry(i: &[u8]) -> IResult<'_, &[u8]> {
-    let (i, _left) = number::complete::le_u64(i)?;
-    let (i, _right) = number::complete::le_u64(i)?;
-    let (i, _row) = number::complete::le_u32(i)?;
-    let (i, _col) = number::complete::le_u32(i)?;
-    let (i, _proof) = number::complete::le_u64(i)?;
-    let (i, _idx) = number::complete::le_u32(i)?;
-    let (i, _kind) = number::complete::le_u8(i)?;
+use index::IndexEntry;
 
-    parse_nul_terminated_slice(i)
+fn parse_index_entry(i: &[u8]) -> IResult<'_, IndexEntry> {
+    let (i, left) = number::complete::le_u64(i)?;
+    let (i, right) = number::complete::le_u64(i)?;
+    let (i, row) = number::complete::le_u32(i)?;
+    let (i, col) = number::complete::le_u32(i)?;
+    let (i, proof) = number::complete::le_u64(i)?;
+    let (i, idx) = number::complete::le_u32(i)?;
+    let (i, kind) = number::complete::le_u8(i)?;
+
+    let (i, name) = parse_nul_terminated_slice(i)?;
+
+    let ie = IndexEntry {
+        left,
+        right,
+        row,
+        col,
+        proof,
+        idx,
+        kind,
+        name,
+    };
+
+    Ok((i, ie))
 }
 
 pub fn parse_index<'a, V: index::Visitor>(
@@ -100,13 +115,13 @@ pub fn parse_index<'a, V: index::Visitor>(
 ) -> IResult<'a, ()> {
     let mut left = table;
 
-    for idx in 0..len {
+    for _idx in 0..len {
         let (i, ptr) = number::complete::le_u64(left)?;
 
         let (entry, _) = complete::take(ptr as usize)(file)?;
-        let (_, name) = parse_index_entry(entry)?;
+        let (_, index_entry) = parse_index_entry(entry)?;
 
-        visitor.visit(idx, ptr, name);
+        visitor.visit(ptr, index_entry);
 
         if left.is_empty() {
             break;
@@ -116,6 +131,24 @@ pub fn parse_index<'a, V: index::Visitor>(
     }
 
     Ok((left, ()))
+}
+
+pub fn parse_index_idx<'a, V: index::Visitor>(
+    file: &'a [u8],
+    index: &'a [u8],
+    idx: usize,
+    visitor: &mut V,
+) -> IResult<'a, ()> {
+    let (ptr, _) = complete::take(idx * 8)(index)?;
+
+    let (_, ptr) = number::complete::le_u64(ptr)?;
+
+    let (entry, _) = complete::take(ptr as usize)(file)?;
+    let (_, index_entry) = parse_index_entry(entry)?;
+
+    visitor.visit(ptr, index_entry);
+
+    Ok((index, ()))
 }
 
 fn parse_term<'a, V: Visitor<'a>>(

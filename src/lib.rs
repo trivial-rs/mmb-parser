@@ -45,6 +45,18 @@ impl<'a> Mmb<'a> {
         .unwrap();
     }
 
+    pub fn visit_sort_index_idx<V: index::Visitor>(&self, visitor: &mut V, idx: usize) {
+        parser::parse_index_idx(self.file, self.sort_index, idx, visitor).unwrap();
+    }
+
+    pub fn visit_term_index_idx<V: index::Visitor>(&self, visitor: &mut V, idx: usize) {
+        parser::parse_index_idx(self.file, self.term_index, idx, visitor).unwrap();
+    }
+
+    pub fn visit_theorem_index_idx<V: index::Visitor>(&self, visitor: &mut V, idx: usize) {
+        parser::parse_index_idx(self.file, self.theorem_index, idx, visitor).unwrap();
+    }
+
     pub fn visit<V: Visitor<'a>>(
         &self,
         visitor: &mut V,
