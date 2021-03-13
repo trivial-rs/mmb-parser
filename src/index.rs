@@ -27,9 +27,16 @@ impl<'a> Index<'a> {
     }
 
     /// Return the pointer to the sort index entry by index number
-    pub fn sort_pointer(&self, idx: usize) -> u64 {
-        let (_, ptr) = parser::parse_index_pointer(self.sorts, idx).unwrap();
-        ptr
+    pub fn sort_pointer(&self, idx: usize) -> Option<u64> {
+        let num_sorts = self.sorts.len() / 8;
+
+        if idx < num_sorts {
+            parser::parse_index_pointer(self.sorts, idx)
+                .ok()
+                .map(|ptr| ptr.1)
+        } else {
+            None
+        }
     }
 
     /// Return the slice of the data containing the pointers to the term index
@@ -39,9 +46,16 @@ impl<'a> Index<'a> {
     }
 
     /// Return the pointer to the sort index entry by index number
-    pub fn term_pointer(&self, idx: usize) -> u64 {
-        let (_, ptr) = parser::parse_index_pointer(self.terms, idx).unwrap();
-        ptr
+    pub fn term_pointer(&self, idx: usize) -> Option<u64> {
+        let num_terms = self.terms.len() / 8;
+
+        if idx < num_terms {
+            parser::parse_index_pointer(self.terms, idx)
+                .ok()
+                .map(|ptr| ptr.1)
+        } else {
+            None
+        }
     }
 
     /// Return the slice of the data containing the pointers to the theorem index
@@ -51,9 +65,16 @@ impl<'a> Index<'a> {
     }
 
     /// Return the pointer to the theorem index entry by index number
-    pub fn theorem_pointer(&self, idx: usize) -> u64 {
-        let (_, ptr) = parser::parse_index_pointer(self.theorems, idx).unwrap();
-        ptr
+    pub fn theorem_pointer(&self, idx: usize) -> Option<u64> {
+        let num_theorems = self.theorems.len() / 8;
+
+        if idx < num_theorems {
+            parser::parse_index_pointer(self.theorems, idx)
+                .ok()
+                .map(|ptr| ptr.1)
+        } else {
+            None
+        }
     }
 
     /// Visit all sorts in the index using the supplied `visitor`
