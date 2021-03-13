@@ -23,16 +23,28 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
     let (i, _padding) = complete::take(4u8)(i)?;
 
     let (i, index_ptr) = number::complete::le_u64(i)?;
-
-    let (index, _) = complete::take(index_ptr as usize)(input)?;
-
-    let (j, _root_bst_ptr) = number::complete::le_u64(index)?;
-
-    let (j, sort_index) = complete::take(num_sorts * 8)(j)?;
-    let (j, term_index) = complete::take(num_terms * 8)(j)?;
-    let (_, theorem_index) = complete::take(num_theorems * 8)(j)?;
-
     let (i, sorts) = complete::take(num_sorts)(i)?;
+
+    let index = if index_ptr != 0 {
+        let (index, _) = complete::take(index_ptr as usize)(input)?;
+
+        let (j, root_bst_ptr) = number::complete::le_u64(index)?;
+
+        let (j, sorts) = complete::take(num_sorts * 8)(j)?;
+        let (j, terms) = complete::take(num_terms * 8)(j)?;
+        let (_, theorems) = complete::take(num_theorems * 8)(j)?;
+
+        let index = index::Index {
+            root_bst_ptr,
+            file: input,
+            sorts,
+            terms,
+            theorems,
+        };
+        Some(index)
+    } else {
+        None
+    };
 
     let (proofs, _) = complete::take(proofs_ptr as usize)(input)?;
 
@@ -54,9 +66,7 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
             terms,
             theorems,
             proofs,
-            sort_index,
-            term_index,
-            theorem_index,
+            index,
         },
     ))
 }
@@ -82,7 +92,7 @@ fn parse_nul_terminated_slice(i: &[u8]) -> IResult<'_, &[u8]> {
 
 use index::IndexEntry;
 
-fn parse_index_entry(i: &[u8]) -> IResult<'_, IndexEntry> {
+fn parse_index_entry(i: &[u8], ptr: u64) -> IResult<'_, IndexEntry> {
     let (i, left) = number::complete::le_u64(i)?;
     let (i, right) = number::complete::le_u64(i)?;
     let (i, row) = number::complete::le_u32(i)?;
@@ -94,6 +104,7 @@ fn parse_index_entry(i: &[u8]) -> IResult<'_, IndexEntry> {
     let (i, name) = parse_nul_terminated_slice(i)?;
 
     let ie = IndexEntry {
+        ptr,
         left,
         right,
         row,
@@ -119,9 +130,9 @@ pub fn parse_index<'a, V: index::Visitor>(
         let (i, ptr) = number::complete::le_u64(left)?;
 
         let (entry, _) = complete::take(ptr as usize)(file)?;
-        let (_, index_entry) = parse_index_entry(entry)?;
+        let (_, index_entry) = parse_index_entry(entry, ptr)?;
 
-        visitor.visit(ptr, index_entry);
+        visitor.visit(index_entry);
 
         if left.is_empty() {
             break;
@@ -133,22 +144,26 @@ pub fn parse_index<'a, V: index::Visitor>(
     Ok((left, ()))
 }
 
-pub fn parse_index_idx<'a, V: index::Visitor>(
+pub fn parse_index_pointer<'a>(index: &'a [u8], idx: usize) -> IResult<'a, u64> {
+    let (ptr, _) = complete::take(idx * 8)(index)?;
+    let (i, ptr) = number::complete::le_u64(ptr)?;
+
+    Ok((i, ptr))
+}
+
+pub fn parse_index_by_idx<'a>(
     file: &'a [u8],
     index: &'a [u8],
     idx: usize,
-    visitor: &mut V,
-) -> IResult<'a, ()> {
+) -> IResult<'a, IndexEntry<'a>> {
     let (ptr, _) = complete::take(idx * 8)(index)?;
 
     let (_, ptr) = number::complete::le_u64(ptr)?;
 
     let (entry, _) = complete::take(ptr as usize)(file)?;
-    let (_, index_entry) = parse_index_entry(entry)?;
+    let (_, index_entry) = parse_index_entry(entry, ptr)?;
 
-    visitor.visit(ptr, index_entry);
-
-    Ok((index, ()))
+    Ok((index, index_entry))
 }
 
 fn parse_term<'a, V: Visitor<'a>>(
