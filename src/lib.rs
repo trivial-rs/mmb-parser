@@ -21,6 +21,7 @@ pub struct Mmb<'a> {
 }
 
 impl<'a> Mmb<'a> {
+    /// Build a `Mmb` struct by parsing the file header
     pub fn from(file: &'a [u8]) -> Option<Mmb<'a>> {
         parser::parse(file).map(|x| x.1).ok()
     }
