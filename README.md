@@ -4,7 +4,10 @@
 [![Documentation](https://docs.rs/mmb-parser/badge.svg)](https://docs.rs/mmb-parser)
 ![License](https://img.shields.io/crates/l/mmb-parser.svg)
 
-A library for parsing binary Metamath Zero proof files.
+A library for parsing binary [Metamath Zero](https://arxiv.org/abs/1910.10703) proof files.
+
+The proof files for Metamath Zero are designed to be consumed by the verifier in situ, such that parsing the file into complicated data structures is not necessary.
+This library exposes the internals of the file format for inspecting and debugging purposes.
 
 ## License
 
