@@ -1,145 +1,106 @@
 /// Index
 /// The index contains information about items in the proof file that are useful
 /// for printing and debugging purposes.
+///
+/// The index is a collection of tables that in turn contain domain specific
+/// data. Because the index is designed to be extensible, each table entry is
+/// identified by an id that determines how the data should be interpreted.
 #[derive(Debug)]
 pub struct Index<'a> {
-    /// The root pointer of the index BST (binary search tree)
-    pub(crate) root_bst_ptr: u64,
-    /// A pointer to the proof file, used to resolve file relative pointers
     pub(crate) file: &'a [u8],
-    pub(crate) sorts: &'a [u8],
-    pub(crate) terms: &'a [u8],
-    pub(crate) theorems: &'a [u8],
+
+    pub(crate) num_sorts: u8,
+    pub(crate) num_terms: u32,
+    pub(crate) num_theorems: u32,
+
+    /// The number of table entries in the index
+    pub(crate) num_entries: u64,
+
+    /// The slice containing the table entries.
+    pub(crate) entries: &'a [u8],
 }
 
-use crate::{error, parser};
+use crate::parser;
+
+pub use self::name_table::NameTable;
+
+pub mod name_table;
 
 impl<'a> Index<'a> {
-    /// Return a pointer to the root of the index binary search tree (BST)
-    pub fn root_bst_ptr(&self) -> u64 {
-        self.root_bst_ptr
-    }
-
-    /// Return the slice of the data containing the pointers to the sort index
-    /// entries
-    pub fn sorts(&self) -> &[u8] {
-        self.sorts
-    }
-
-    /// Return the pointer to the sort index entry by index number
-    pub fn sort_pointer(&self, idx: usize) -> Option<u64> {
-        let num_sorts = self.sorts.len() / 8;
-
-        if idx < num_sorts {
-            parser::parse_index_pointer(self.sorts, idx)
-                .ok()
-                .map(|ptr| ptr.1)
-        } else {
-            None
+    /// Returns an iterator over all table entries in the index.
+    pub fn iter(&self) -> EntryIterator<'a> {
+        EntryIterator {
+            entries: self.entries,
         }
-    }
-
-    /// Return the slice of the data containing the pointers to the term index
-    /// entries
-    pub fn terms(&self) -> &[u8] {
-        self.terms
-    }
-
-    /// Return the pointer to the sort index entry by index number
-    pub fn term_pointer(&self, idx: usize) -> Option<u64> {
-        let num_terms = self.terms.len() / 8;
-
-        if idx < num_terms {
-            parser::parse_index_pointer(self.terms, idx)
-                .ok()
-                .map(|ptr| ptr.1)
-        } else {
-            None
-        }
-    }
-
-    /// Return the slice of the data containing the pointers to the theorem index
-    /// entries
-    pub fn theorems(&self) -> &[u8] {
-        self.theorems
-    }
-
-    /// Return the pointer to the theorem index entry by index number
-    pub fn theorem_pointer(&self, idx: usize) -> Option<u64> {
-        let num_theorems = self.theorems.len() / 8;
-
-        if idx < num_theorems {
-            parser::parse_index_pointer(self.theorems, idx)
-                .ok()
-                .map(|ptr| ptr.1)
-        } else {
-            None
-        }
-    }
-
-    /// Visit all sorts in the index using the supplied `visitor`
-    pub fn visit_sorts<V: Visitor>(&self, visitor: &mut V) {
-        let num_sorts = self.sorts.len() / 8;
-        parser::parse_index(self.file, self.sorts, num_sorts, visitor).unwrap();
-    }
-
-    /// Visit all terms in the index using the supplied `visitor`
-    pub fn visit_terms<V: Visitor>(&self, visitor: &mut V) {
-        let num_terms = self.terms.len() / 8;
-        parser::parse_index(self.file, self.terms, num_terms, visitor).unwrap();
-    }
-
-    /// Visit all theorems in the index using the supplied `visitor`
-    pub fn visit_theorems<V: Visitor>(&self, visitor: &mut V) {
-        let num_theorems = self.theorems.len() / 8;
-        parser::parse_index(self.file, self.theorems, num_theorems, visitor).unwrap();
-    }
-
-    /// Get the pointer to a sort index entry, and the entry data itself
-    pub fn sort(&self, idx: usize) -> Result<IndexEntry, nom::Err<error::ParseError>> {
-        let (_, entry) = parser::parse_index_by_idx(self.file, self.sorts, idx)?;
-
-        Ok(entry)
-    }
-
-    /// Get the pointer to a term index entry, and the entry data itself
-    pub fn term(&self, idx: usize) -> Result<IndexEntry, nom::Err<error::ParseError>> {
-        let (_, entry) = parser::parse_index_by_idx(self.file, self.terms, idx)?;
-
-        Ok(entry)
-    }
-
-    /// Get the pointer to a theorem index entry, and the entry data itself
-    pub fn theorem(&self, idx: usize) -> Result<IndexEntry, nom::Err<error::ParseError>> {
-        let (_, entry) = parser::parse_index_by_idx(self.file, self.theorems, idx)?;
-
-        Ok(entry)
     }
 }
 
-/// An index entry
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct IndexEntry<'a> {
-    /// Pointer to this entry in the index
-    pub ptr: u64,
-    /// Pointer (file-relative) to the left subtree of this item in the BST
-    pub left: u64,
-    /// Pointer (file-relative) to the right subtree of this item in the BST
-    pub right: u64,
-    /// Row number in source file
-    pub row: u32,
-    /// Column number in source file
-    pub col: u32,
-    /// Pointer to the command statement that defines this item
-    pub proof: u64,
-    /// Index to the item in the relevant table
-    pub idx: u32,
-    /// To identify the item type
-    pub kind: u8,
-    /// A null-terminated character string with the name
-    pub name: &'a [u8],
+impl<'a> IntoIterator for Index<'a> {
+    type Item = Entry;
+    type IntoIter = EntryIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
-pub trait Visitor {
-    fn visit<'a>(&mut self, entry: IndexEntry);
+impl<'a> IntoIterator for &Index<'a> {
+    type Item = Entry;
+    type IntoIter = EntryIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// An iterator over table entries in the index.
+pub struct EntryIterator<'a> {
+    entries: &'a [u8],
+}
+
+/// A table entry in the index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Entry {
+    pub(crate) id: u32,
+    pub(crate) ptr: u64,
+}
+
+const NAME_TABLE_ID: u32 = 0x656d614e;
+
+impl Entry {
+    /// If this table entry is a name table, return a `NameTable` object to the
+    /// name table, or `None` otherwise.
+    ///
+    /// Because the name table contains file relative pointers, we need the
+    /// original index as a parameter to resolve these.
+    pub fn as_name_table<'a>(&self, index: &Index<'a>) -> Option<NameTable<'a>> {
+        if self.id != NAME_TABLE_ID {
+            return None;
+        }
+
+        let num = index.num_sorts as u64 + index.num_terms as u64 + index.num_theorems as u64;
+        let entries = parser::parse_name_entries(index.file, num, self.ptr)
+            .ok()?
+            .1;
+
+        Some(NameTable::new(
+            index.num_sorts,
+            index.num_terms,
+            index.num_theorems,
+            index.file,
+            entries,
+        ))
+    }
+}
+
+impl<'a> Iterator for EntryIterator<'a> {
+    type Item = Entry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (left, entry) = parser::parse_index_entry(self.entries).ok()?;
+
+        self.entries = left;
+
+        Some(entry)
+    }
 }

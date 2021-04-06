@@ -1,12 +1,15 @@
+use index::Entry;
 use nom::bytes::complete;
 use nom::number;
 use nom::Err;
 
-use crate::error::*;
 use crate::index;
 use crate::opcode::{Command, Proof, Unify};
 use crate::visitor::{ProofStream, UnifyStream, Visitor};
 use crate::Mmb;
+use crate::{error::*, index::name_table::Name};
+
+const TABLE_ENTRY_SIZE: u64 = 8 * 2;
 
 pub fn parse(input: &[u8]) -> IResult<Mmb> {
     let (i, _) = take_magic(input)?;
@@ -28,7 +31,34 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
     let index = if index_ptr != 0 {
         let (index, _) = complete::take(index_ptr as usize)(input)?;
 
-        let (j, root_bst_ptr) = number::complete::le_u64(index)?;
+        let (j, num) = number::complete::le_u64(index)?;
+        let (_, entries) = complete::take(num * TABLE_ENTRY_SIZE)(j)?;
+
+        let index = index::Index {
+            file: input,
+            num_sorts,
+            num_terms,
+            num_theorems,
+            num_entries: num,
+            entries,
+        };
+        /*
+        for _ in 0..num {
+            let (k, id) = number::complete::le_u32(j)?;
+            let (k, _padding) = number::complete::le_u32(k)?;
+            let (k, ptr) = number::complete::le_u64(k)?;
+
+            /*
+            if id == 0x656d614e {
+                let (kk, ptr) = number::complete::le_u64(ptr)?;
+                //
+            }
+            */
+
+            println!("{:x}, {}, {}", id, _padding, ptr);
+            j = k;
+        }
+
 
         let (j, sorts) = complete::take(num_sorts * 8)(j)?;
         let (j, terms) = complete::take(num_terms * 8)(j)?;
@@ -41,6 +71,9 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
             terms,
             theorems,
         };
+        Some(index)
+        */
+
         Some(index)
     } else {
         None
@@ -71,6 +104,56 @@ pub fn parse(input: &[u8]) -> IResult<Mmb> {
     ))
 }
 
+pub fn parse_index_entry<'a>(entries: &'a [u8]) -> IResult<'a, Entry> {
+    let (left, id) = number::complete::le_u32(entries)?;
+    // TODO: check if padding is zero?
+    let (left, _padding) = number::complete::le_u32(left)?;
+    let (left, ptr) = number::complete::le_u64(left)?;
+
+    let entry = Entry { id, ptr };
+
+    Ok((left, entry))
+}
+
+const NAME_ENTRY_SIZE: u64 = 8 * 2;
+
+pub fn parse_name_entries<'a>(file: &'a [u8], num: u64, ptr: u64) -> IResult<'a, &'a [u8]> {
+    let num = num * NAME_ENTRY_SIZE;
+    let (entries, _) = complete::take(ptr as usize)(file)?;
+    let (left, entries) = complete::take(num)(entries)?;
+
+    Ok((left, entries))
+}
+
+pub fn seek_name_entry<'a>(file: &'a [u8], entries: &'a [u8], idx: u64) -> IResult<'a, Name<'a>> {
+    let (entry, _) = complete::take(idx * NAME_ENTRY_SIZE)(entries)?;
+    let (left, name) = parse_name_entry(file, entry)?;
+
+    Ok((left, name))
+}
+
+pub fn parse_name_entry<'a>(file: &'a [u8], entry: &'a [u8]) -> IResult<'a, Name<'a>> {
+    let (left, ptr) = number::complete::le_u64(entry)?;
+    let (left, name_ptr) = number::complete::le_u64(left)?;
+
+    let (name, _) = complete::take(name_ptr as usize)(file)?;
+    let (_, name) = parse_nul_terminated_slice(name)?;
+
+    let name = Name { ptr, name };
+
+    Ok((left, name))
+}
+
+pub fn subslice_name_table<'a>(entries: &'a [u8], from: u64, len: u64) -> IResult<'a, &'a [u8]> {
+    let from = from * NAME_ENTRY_SIZE;
+    let len = len * NAME_ENTRY_SIZE;
+
+    let (left, _) = complete::take(from)(entries)?;
+    let (left, subslice) = complete::take(len)(left)?;
+
+    Ok((left, subslice))
+}
+
 fn parse_binders<'a, T: From<u64>>(input: &'a [u8], slice: &mut [T]) -> IResult<'a, ()> {
     let mut left = input;
 
@@ -87,83 +170,7 @@ fn parse_nul_terminated_slice(i: &[u8]) -> IResult<'_, &[u8]> {
     let (_, len) = complete::take_till(|c| c == 0)(i)?;
     let len = len.len();
 
-    complete::take(len + 1)(i)
-}
-
-use index::IndexEntry;
-
-fn parse_index_entry(i: &[u8], ptr: u64) -> IResult<'_, IndexEntry> {
-    let (i, left) = number::complete::le_u64(i)?;
-    let (i, right) = number::complete::le_u64(i)?;
-    let (i, row) = number::complete::le_u32(i)?;
-    let (i, col) = number::complete::le_u32(i)?;
-    let (i, proof) = number::complete::le_u64(i)?;
-    let (i, idx) = number::complete::le_u32(i)?;
-    let (i, kind) = number::complete::le_u8(i)?;
-
-    let (i, name) = parse_nul_terminated_slice(i)?;
-
-    let ie = IndexEntry {
-        ptr,
-        left,
-        right,
-        row,
-        col,
-        proof,
-        idx,
-        kind,
-        name,
-    };
-
-    Ok((i, ie))
-}
-
-pub fn parse_index<'a, V: index::Visitor>(
-    file: &'a [u8],
-    table: &'a [u8],
-    len: usize,
-    visitor: &mut V,
-) -> IResult<'a, ()> {
-    let mut left = table;
-
-    for _idx in 0..len {
-        let (i, ptr) = number::complete::le_u64(left)?;
-
-        let (entry, _) = complete::take(ptr as usize)(file)?;
-        let (_, index_entry) = parse_index_entry(entry, ptr)?;
-
-        visitor.visit(index_entry);
-
-        if left.is_empty() {
-            break;
-        }
-
-        left = i;
-    }
-
-    Ok((left, ()))
-}
-
-pub fn parse_index_pointer<'a>(index: &'a [u8], idx: usize) -> IResult<'a, u64> {
-    let (ptr, _) = complete::take(idx * 8)(index)?;
-    let (i, ptr) = number::complete::le_u64(ptr)?;
-
-    Ok((i, ptr))
-}
-
-pub fn parse_index_by_idx<'a>(
-    file: &'a [u8],
-    index: &'a [u8],
-    idx: usize,
-) -> IResult<'a, IndexEntry<'a>> {
-    let (ptr, _) = complete::take(idx * 8)(index)?;
-
-    let (_, ptr) = number::complete::le_u64(ptr)?;
-
-    let (entry, _) = complete::take(ptr as usize)(file)?;
-    let (_, index_entry) = parse_index_entry(entry, ptr)?;
-
-    Ok((index, index_entry))
+    complete::take(len)(i)
 }
 
 fn parse_term<'a, V: Visitor<'a>>(
